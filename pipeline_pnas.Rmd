@@ -157,10 +157,23 @@ for f in *vcf.gz; do tabix -f -p vcf $f; done
 
 Third, we merged isolates from list of high quality genomes (information obtained from assembly data)
 
+```{bash, eval=F}
+bcftools merge --file-list isolate_list > ethiopia_fo_structure.vcf
+```
 
 To ensure that the subsequent VCF was high quality, especially for linkage disequilibrium, we adjusted filters to learn how different filters affect the subsequent linkage disequilibrium analyses. 
 
 The main two parameters were missingness and minor allele frequency (MAF). MAF was of particular importance to us, as often researchers adjust MAF cutoff as >0.05 without regard for the effects on the population. 
+
+```{bash, eval=F}
+#VCF 
+vcftools --vcf ethiopia_fo_structure.vcf --maf 0.05 --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.0_05.vcf.gz
+
+#note that this was also conducted but there were only minor differences in the outcomes. The overall clonal groupings remained the same. The LD decay curve showed minor differences
+
+#include plot /home/guy/Documents/Research/Cook/fusarium_pnas_final/old/Linkage/ld_total_maf.png
+```
+
 
 To do this we 
   - missingness
