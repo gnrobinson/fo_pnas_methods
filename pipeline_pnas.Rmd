@@ -1,0 +1,158 @@
+---
+title: Bioinformatic Pipeline - "Hiding in Plain Sight - Genome-wide recombination
+  and horizontal gene transfer drive clonal diversity in Fusarium oxysporum fsp ciceris"
+author: "Fayyaz A, Robinson G, Chang PL, Bekele D, Yimer SM, Carrasquilla-Garcia N, Negash K, Anand K. Surendrarao, Eric J.B. von Wettberg, Robbertse B, Seid Ahmedi, Tesfaye K, Fikre Ab, Farmer AD and Cook DR"
+#date: '2023-02-07'
+output:
+  #rmdformats::readthedown:
+  #  toc_depth: 5
+  #  self_contained: true
+  #  thumbnails: false
+  #  lightbox: true
+  #  gallery: true
+  #  highlight: tango
+  html_document: default
+  #pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#library(reticulate)
+```
+
+---
+
+## Contents
+
+### 1. [Overview](#Overview)
+### 2. [Genome Assembly](#assembly)
+### 3. [Gene Annotation and Analyses](#gene_annotation)
+### 4. [Identification of SNP and Genetic Groups](#read_mapping)
+### 5. [Population Analyses](#pop_gen)
+### 6. [References](#refs)
+
+---
+
+## Help with Rmarkdown
+### https://holtzy.github.io/Pimp-my-rmd/
+### https://www.rstudio.com/wp-content/uploads/2015/02/rmarkdown-cheatsheet.pdf
+
+## <a id="Overview"></a>1. Overview
+
+Plot overview pipeline
+
+## <a id="assembly"></a>2. Genome Assembly
+
+```{r, eval=F}
+#####################################################################################
+######################### Need input from Amna/Peter ################################
+#####################################################################################
+```
+
+A. Quality check with FastQC
+B. Low quality reads and adapters trimmed using Trimmomatic v36
+C. Error correction using ALLPATHS-LG
+D. Assembly using SPAdes
+E. Genome completeness assessed using BUSCO v3 (Ascomycota odb9 dataset)
+
+## <a id="gene_annotation"></a>3. Gene Annotation and Analyses
+
+```{r, eval=F}
+#####################################################################################
+######################### Need input from Amna/Peter ################################
+#####################################################################################
+```
+
+A. Average nucleotide identity calculated with Pyani
+B. Annotation
+  - RepeatModeler
+  - MAKER
+  - Interpro, GeneOntology, AHRD
+  - Gene Enrichment with BLAST2GO
+  - SIX genes homologs BLASTp
+  - Orthologs identified with Orthofinder (default excpt with -msa)
+C. Phylogenetic Analyses
+  - BEAST
+  - iTOL
+  - Robinson-Foults with ETE3 toolkit
+D. Pangenome
+  - PanOCT
+
+## <a id="read_mapping"></a>4. Identification of SNP and genetic groups
+
+### A. Read mapping
+
+### i. Illumina read mapping was conducted with BWA MEM 0.7.9a-r786
+
+Example -- https://www.illumina.com/products/by-type/informatics-products/basespace-sequence-hub/apps/bwa-aligner.html
+
+Tools required:
+
+- BWA MEM v0.7.9a-r786
+
+- SAMtools v1.3.1
+
+- Picard 
+
+```{bash, eval=FALSE}
+#create index for F. oxysporum reference genome (Fol4287 - GCF_000149955.1)
+bwa index [-a bwtsw|is] reference.fasta index_prefix
+
+#running BWA (looped through all Illumina paired-end read data)
+#loops through Illumina read prefixes 
+for f in $(ls SRR* | cut -d"_" -f1); \
+do bwa mem -M -t 32 reference.fasta -P ${f}_1.fastq ${f}_2.fastq > ${f}.sam; \
+done
+
+#converts SAM file to BAM file
+for f in $(ls *.sam | cut -d"." -f1); do samtools fixmate -O bam ${f}.sam ${f}.bam
+```
+
+### ii. Variant calling with GATK v4.1 against Fol4287 reference
+
+Tools required:
+
+- GATK v4.1
+
+```{bash, eval=F}
+#####################################################################################
+######################### Need input from Amna/Peter ################################
+#####################################################################################
+```
+
+
+B. Filtering with VCFtools
+  - missingness
+  - maf
+  - heterozygous
+  - masking ambiguous SNP calls
+  - Mapping informed with MUMmer whole genome alignments
+  
+C. Identification of clonal groups
+  - Subsampling SNPs ~10% X10 times
+  - STRUCTURE
+  - STRUCTUREharvester - Evanno stats
+  - CLUMPP v1.1.2 merge all 10 replicates (LargeKgreedy)
+  - STRUCTURE plotted with R script
+  - Assigning clonal groupings using Euclidean distances
+
+## <a id="pop_gen"></a>5. Population Analyses
+
+A. Geographic Analyses
+  - Plotting onto maps in R
+  - Mantel tests
+B. Linkage disequilibrium
+  - Additional filtering for derived SNPs and ancestral SNPs
+    - BASH scripts
+  - LD with r2 (PLINK)
+    - Inter and intra-chromosomal LD
+    - Genome-wide LD across genome
+  - LD with rbarD (Poppr)
+C. Nucleotide Diversity (pi)
+D. Tajima's D
+E. Fst (Weighted)
+  - Core SNP Fst
+  - Pangenome Fst
+  - BUSCO Fst
+
+## <a id="refs"></a>6. References
