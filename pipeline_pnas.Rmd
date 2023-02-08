@@ -121,7 +121,33 @@ Tools required:
 ```
 
 
-B. Filtering with VCFtools
+### B. Filtering VCF file 
+
+Tools required:
+bcftools/1.16
+vcftools
+For most population analyses, we exclusively used high quality genomes (based on BUSCO completeness > 97%, N50, number of scaffolds and genome size) - see "Genome Assembly". This provided a total list of 120 genomes, 99 of which were taxonomically within the FOSC.
+
+
+```{bash, eval=F}
+######## ./splitting_vcfs_retaining.sh ###########
+
+#!/usr/bin/env bash
+for file in *.vcf.gz; do
+  for sample in `bcftools query -l $file`; do
+    bcftools view -Oz -s $sample -o ${file/.vcf*/.$sample.vcf.gz} $file
+  done
+done
+```
+
+
+
+
+To ensure that the subsequent VCF was high quality, especially for linkage disequilibrium, we adjusted filters to learn how different filters affect the subsequent linkage disequilibrium analyses. 
+
+The main two parameters were missingness and minor allele frequency (MAF). MAF was of particular importance to us, as often researchers adjust MAF cutoff as >0.05 without regard for the effects on the population. 
+
+To do this we 
   - missingness
   - maf
   - heterozygous
