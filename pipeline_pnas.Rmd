@@ -124,10 +124,16 @@ Tools required:
 ### B. Filtering VCF file 
 
 Tools required:
-bcftools/1.16
-vcftools
-For most population analyses, we exclusively used high quality genomes (based on BUSCO completeness > 97%, N50, number of scaffolds and genome size) - see "Genome Assembly". This provided a total list of 120 genomes, 99 of which were taxonomically within the FOSC.
 
+bcftools/1.16
+
+vcftools/b240116
+
+For most population analyses, we exclusively used high quality genomes (based on BUSCO completeness > 97%, N50, number of scaffolds and genome size) - see "Genome Assembly". This provided a total list of 120 genomes, 99 of which were taxonomically within the FOSC (Fig. 2). This is reduced from the earlier VCF file, which contained 320 isolates (Supplemental Fig. 1)
+
+Reducing the VCF file from 320 to 120, was done using bcftools (custom bash script).
+
+First, we split the VCF into separate single isolate VCF files
 
 ```{bash, eval=F}
 ######## ./splitting_vcfs_retaining.sh ###########
@@ -140,7 +146,13 @@ for file in *.vcf.gz; do
 done
 ```
 
+Second, we indexed all the single isolate VCF files
 
+```{bash, eval=F}
+for f in *vcf.gz; do tabix -f -p vcf $f; done
+```
+
+Third, we merged isolates from list of high quality genomes (information obtained from assembly data)
 
 
 To ensure that the subsequent VCF was high quality, especially for linkage disequilibrium, we adjusted filters to learn how different filters affect the subsequent linkage disequilibrium analyses. 
