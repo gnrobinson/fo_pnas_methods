@@ -65,7 +65,7 @@ E. Genome completeness assessed using BUSCO v3 (Ascomycota odb9 dataset)
 
 A. Average nucleotide identity calculated with Pyani
 ```{bash, eval=False}
-/home/localhost/adf/sw/bin/singularity run /erdos/adf/sw/singularityImages/average_nucleotide_identity-v0.2.9.simg -i all-file-pyani/ -g -m ANIb --workers 20 -o pyani-result-552-genes
+/home/localhost/bin/singularity run /home/localhost/singularityImages/average_nucleotide_identity-v0.2.9.simg -i all-file-pyani/ -g -m ANIb --workers 20 -o pyani-results
 ```
 B. Annotation
   - RepeatModeler
