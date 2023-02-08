@@ -52,8 +52,13 @@ Plot overview pipeline
 A. Quality check with FastQC
 B. Low quality reads and adapters trimmed using Trimmomatic v36
 C. Error correction using ALLPATHS-LG
-D. Assembly using SPAdes
+D. Assembly using A5
 E. Genome completeness assessed using BUSCO v3 (Ascomycota odb9 dataset)
+```{bash, eval=False}
+## parameters to use for runnig BUSCO
+docker run -it --rm -v $(pwd):/home/working -w /home/working chrishah/busco-docker run_BUSCO.py --in ./Fusarium_oxysporum.fasta --out Fusairum-BUSCO -l ./sordariomyceta_odb9 --mode genome --sp fusarium_graminearum --c 20
+```
+
 
 ## <a id="gene_annotation"></a>3. Gene Annotation and Analyses
 
@@ -68,8 +73,33 @@ A. Average nucleotide identity calculated with Pyani
 /home/localhost/bin/singularity run /home/localhost/singularityImages/average_nucleotide_identity-v0.2.9.simg -i all-file-pyani/ -g -m ANIb --workers 20 -o pyani-results
 ```
 B. Annotation
-  - RepeatModeler
+ - RepeatModeler
+ 
+```{bash, eval=False}
+## to generate library for custom repeats using RepeatModeler
+ $:/home/localhost/adf/sw/bin/singularity shell /erdos/adf/sw/singularityImages/repeatmodeler-1.0.11--pl5.22.0_0.img
+
+./dfam-tetools.sh --singularity --container=dfam/tetools:latest --trf_prgm=/erdos/adf/sw/trf409.linux64 -- BuildDatabase -name fusariumdatabase -engine ncbi Fo-Et-0090.fasta
+./dfam-tetools.sh --singularity --container=dfam/tetools:latest --trf_prgm=/erdos/adf/sw/trf409.linux64 -- RepeatModeler -database fusariumdatabase -LTRStruct -pa 20 >& repeats.out
+##used this repeats to feed into MAKER
+```
+
   - MAKER
+```{bash, eval=False}
+##structural annotation
+i=`ls *.fasta`
+for j in $i; do  maker -g $j 2>&1 | tee round1_$j.log ; done
+mkdir snap
+cd snap
+maker2zff -n ../Fo-Et-0090.all.gff
+fathom genome.ann genome.dna -categorize 1000
+fathom uni.ann uni.dna -export 1000 -plus
+forge export.ann export.dna
+hmm-assembler.pl Fo-Et-0090 . > Fo-Et-0090.hmm
+##used hmm file to train next round of MAKER for all of the genome
+for j in $i; do  maker -g $j 2>&1 | tee round1_$j.log ; done
+```
+  
   - Interpro, GeneOntology, AHRD
   - Gene Enrichment with BLAST2GO
   - SIX genes homologs BLASTp
