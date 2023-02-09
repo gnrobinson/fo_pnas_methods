@@ -64,7 +64,7 @@ E. Genome completeness assessed using BUSCO v3 (Ascomycota odb9 dataset)
 ```
 
 A. Average nucleotide identity calculated with Pyani
-```{bash, eval=False}
+```{bash, eval=F}
 /home/localhost/adf/sw/bin/singularity run /erdos/adf/sw/singularityImages/average_nucleotide_identity-v0.2.9.simg -i all-file-pyani/ -g -m ANIb --workers 20 -o pyani-result-552-genes
 ```
 B. Annotation
@@ -132,11 +132,13 @@ bcftools/1.16
 
 vcftools/b240116
 
+mummer/3.23
+
 For most population analyses, we exclusively used high quality genomes (based on BUSCO completeness > 97%, N50, number of scaffolds and genome size) - see "Genome Assembly". This provided a total list of 120 genomes, 99 of which were taxonomically within the FOSC (Fig. 2). This is reduced from the earlier VCF file, which contained 320 isolates (Supplemental Fig. 1)
 
 Reducing the VCF file from 320 to 120, was done using bcftools (custom bash script).
 
-First, we split the VCF into separate single isolate VCF files
+### i. We split the VCF into separate single isolate VCF files
 
 ```{bash, eval=F}
 ######## ./splitting_vcfs_retaining.sh ###########
@@ -149,40 +151,71 @@ for file in *.vcf.gz; do
 done
 ```
 
-Second, we indexed all the single isolate VCF files
+### ii. We indexed all the single isolate VCF files
 
 ```{bash, eval=F}
 for f in *vcf.gz; do tabix -f -p vcf $f; done
 ```
 
-Third, we merged isolates from list of high quality genomes (information obtained from assembly data)
+### iii. We merged isolates from list of high quality genomes (information obtained from assembly data)
 
 ```{bash, eval=F}
 bcftools merge --file-list isolate_list > ethiopia_fo_structure.vcf
 ```
+
+### iv. We removed heterozygous/ambiguous SNPs using sed
+
+```{bash, eval=F}
+sed -i 's#0/1|0/2|0/3|0/4|1/2|1/3|1/4|2/3|2/4|3/4#[.]/[.]#g' ethiopia_fo_structure.vcf
+```
+
+### v. We removed SNPs with high missingness and evaluated MAF filtering
 
 To ensure that the subsequent VCF was high quality, especially for linkage disequilibrium, we adjusted filters to learn how different filters affect the subsequent linkage disequilibrium analyses. 
 
 The main two parameters were missingness and minor allele frequency (MAF). MAF was of particular importance to us, as often researchers adjust MAF cutoff as >0.05 without regard for the effects on the population. 
 
 ```{bash, eval=F}
-#VCF 
-vcftools --vcf ethiopia_fo_structure.vcf --maf 0.05 --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.0_05.vcf.gz
+#VCF file for STRUCTURE groupings
+#vcftools --vcf ethiopia_fo_structure.vcf --maf 0.05 --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.0_05.vcf.gz
+
+#VCF file for population genetic analyses
+vcftools --vcf ethiopia_fo_structure.vcf --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.vcf.gz
 
 #note that this was also conducted but there were only minor differences in the outcomes. The overall clonal groupings remained the same. The LD decay curve showed minor differences
 
 #include plot /home/guy/Documents/Research/Cook/fusarium_pnas_final/old/Linkage/ld_total_maf.png
 ```
 
+### vi. To ensure SNPs were core components of the genome, mapping was informed by additional whole genome alignments (MUMmer)
 
-To do this we 
-  - missingness
-  - maf
-  - heterozygous
-  - masking ambiguous SNP calls
-  - Mapping informed with MUMmer whole genome alignments
-  
-C. Identification of clonal groups
+This was done on per chromosome basis (Fol4287 1-15)
+
+```{bash, eval=F}
+#Here is the example of chromosome 7 (Suppl. Fig. 2)
+for f in Fo-Et-0*; do nucmer -maxmatch -c 100 -p ${f}_chr7 chr7.fna ${f}; done #outputs delta file
+
+# Whole genome alignments were visualized and filtered in R
+Rscript ./mummer_coverage.R
+
+# This led to the removal of any SNPs mapped to chromosomes 3, 6, 14 and 15 as well as supercontig 27 (end of chromosome 1)
+# Any reference contigs that mapped poorly to the Illumina genomes were removed running awk itieratively
+# e.g. awk '($0 !~ "Supercontig_2.27"){print}' all_ethiopia_isolates.vcf.gz
+```
+
+
+### C. Identification of clonal groups using STRUCTURE
+
+Tools required:
+
+structure-console/2.3.4
+
+structure harvester (https://taylor0.biology.ucla.edu/structureHarvester/)
+
+CLUMPP/1.1.2
+
+### i. Subdividing clonal lineages in fungal populations remains challenging. Traditionally, reasearchers have determined clonality based on identical MLGs. This approach fails on a whole genome scale due to the accumulation of erroneous mutations. We employed two different methods to subdivide the lineages: phylogenetics (see Gene Annotation and Analyses - BEAST) and K clustering. 
+
   - Subsampling SNPs ~10% X10 times
   - STRUCTURE
   - STRUCTUREharvester - Evanno stats
