@@ -54,7 +54,7 @@ B. Low quality reads and adapters trimmed using Trimmomatic v36
 C. Error correction using ALLPATHS-LG
 D. Assembly using A5
 E. Genome completeness assessed using BUSCO v3 (Ascomycota odb9 dataset)
-```{bash, eval=False}
+```{bash, eval=F}
 ## parameters to use for runnig BUSCO
 docker run -it --rm -v $(pwd):/home/working -w /home/working chrishah/busco-docker run_BUSCO.py --in ./Fusarium_oxysporum.fasta --out Fusairum-BUSCO -l ./sordariomyceta_odb9 --mode genome --sp fusarium_graminearum --c 20
 ```
