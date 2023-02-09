@@ -81,7 +81,7 @@ B. Annotation
 
 ./dfam-tetools.sh --singularity --container=dfam/tetools:latest --trf_prgm=/erdos/adf/sw/trf409.linux64 -- BuildDatabase -name fusariumdatabase -engine ncbi Fo-Et-0090.fasta
 ./dfam-tetools.sh --singularity --container=dfam/tetools:latest --trf_prgm=/erdos/adf/sw/trf409.linux64 -- RepeatModeler -database fusariumdatabase -LTRStruct -pa 20 >& repeats.out
-##used this repeats to feed into MAKER
+##used custom library of repeats to feed into MAKER
 ```
 
   - MAKER
@@ -96,20 +96,139 @@ fathom genome.ann genome.dna -categorize 1000
 fathom uni.ann uni.dna -export 1000 -plus
 forge export.ann export.dna
 hmm-assembler.pl Fo-Et-0090 . > Fo-Et-0090.hmm
-##used hmm file to train next round of MAKER for all of the genome
+##used this hmm file to train next round of MAKER for all of the genome
 for j in $i; do  maker -g $j 2>&1 | tee round1_$j.log ; done
+
+
+##functional annotation using iprscan, blastp and AHRD
+
+handle_stop_codons.pl --stop_char '\*' Fo-Et-0000.all.maker.proteins.fasta > Fo-Et-0000.all.maker.proteins-stop-remove.fasta
+mkdir chunks
+fasta2chunks.pl --chunksize=1000 --chunk_prefix=chunks/chunk Fo-Et-0000.all.maker.proteins-stop-remove.fasta
+
+IPRSCAN_HELPERS=/erdos/adf/chado_preprocessing
+JOB_LIMIT=32
+export ANALYSIS_DATA_ROOT=`pwd`
+
+mkdir iprscan; pushd iprscan
+if [[ `which qsub` != "" ]]; then
+for f in ../chunks/*; do echo ${IPRSCAN_HELPERS}/run_iprscan.bash $f | qsub -cwd -pe smp 8; done
+else
+for f in ../chunks/*; do
+while (( `jobs | wc -l` >= $JOB_LIMIT )); do sleep 5; done;
+${IPRSCAN_HELPERS}/run_iprscan.bash $f &
+done
+fi
+#then to get iprscan "raw" output for AHRD
+${IPRSCAN_HELPERS}/iprscan_convert.bash
+mkdir ../iprscan_raw
+mv *raw ../iprscan_raw
+cd ../
+mkdir ipr2go
+for f in iprscan_raw/*; do ${IPRSCAN_HELPERS}/ipr2go.pl $f > `echo $f | sed 's/^iprscan_raw/ipr2go/'`; done
+forkjobs_blastp_ahrd.pl --forks $JOB_LIMIT chunks blastp
+
+perl -i ahrd_untruncate_blast_query_ids.pl blastp/fol/*
+perl -i ahrd_untruncate_blast_query_ids.pl blastp/yeast/*
+perl -i ahrd_untruncate_blast_query_ids.pl blastp/gram/*
+perl -i ahrd_untruncate_blast_query_ids.pl blastp/vene/*
+perl -i ahrd_untruncate_blast_query_ids.pl blastp/poae/*
+mkdir AHRD
+perl -p -e 's/\$\{([^}]+)\}/defined $ENV{$1} ? $ENV{$1} : $&/eg' /home/afayyaz/batcher_input_example_template.yml > AHRD/batcher_input_example.yml
+ln -s ${INTERPRO_DB_ROOT}/interpro.dtd AHRD/interpro.dtd
+pushd AHRD
+mkdir batch_yml
+java -cp ${AHRD_GIT_ROOT}/bin/ahrd.jar ahrd.controller.Batcher batcher_input_example.yml
+perl -pi -e 's/$/ &/;' batcher.bash
+source batcher.bash
+for f in *csv; do if [[ ! -s all.ahrd.tsv ]]; then grep '^Protein-Accession' $f > all.ahrd.tsv; fi; sed -n '4,$p' $f >> all.ahrd.tsv; done
+${IPRSCAN_HELPERS}/clean_AHRD.sh all.ahrd.tsv | sed 's/-mRNA-1//' > all.ahrd.tsv.cleaned
+popd
+cat iprscan_raw/* > all.iprscan_raw
+awk 'BEGIN {FS="\t"} NF==9 && $2 == "maker" {print}' Fo-Et-0000.all.gff > Fo-Et-0000.all.maker.gff
+singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img ipr_update_gff Fo-Et-0000.all.maker.gff all.iprscan_raw > Fo-Et-0000.all.gff.iprscan_updated
+${IPRSCAN_HELPERS}/add_note_attr_inGFF.pl AHRD/all.ahrd.tsv.cleaned Fo-Et-0000.all.gff.iprscan_updated > Fo-Et-0000.all.gff.iprscan_updated+AHRD
+singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img maker_map_ids --prefix FO0000- Fo-Et-0000.all.gff > map
+singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img map_gff_ids map Fo-Et-0000.all.gff
+singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img map_fasta_ids map Fo-Et-0000.all.maker.proteins.fasta 
+singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img map_fasta_ids map Fo-Et-0000.all.maker.transcripts.fasta
+singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img map_gff_ids map Fo-Et-0000.all.gff.iprscan_updated+AHRD
+singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img map_data_ids map AHRD/all.ahrd.tsv.cleaned
+cut -d'|' -f1,1 Fo-Et-0000.all.maker.proteins.fasta | sed 's!-RA!!g' >> Fo-Et-0000.all.maker.proteins.final.fasta
+cut -d'|' -f1,1 Fo-Et-0000.all.maker.transcripts.fasta | sed 's!-RA!!g' >> Fo-Et-0000.all.maker.transcripts.final.fasta
+/home/localhost/adf/ahrdify_fasta.pl AHRD/all.ahrd.tsv.cleaned Fo-Et-0000.all.maker.proteins.fasta Fo-Et-0000.all.maker.transcripts.fasta
+##Repeated the same for rest of the genome
 ```
   
-  - Interpro, GeneOntology, AHRD
-  - Gene Enrichment with BLAST2GO
-  - SIX genes homologs BLASTp
+  - Gene Enrichment with BLAST2GO????
+  - SIX genes homologs BLASTp????
   - Orthologs identified with Orthofinder (default excpt with -msa)
+```{bash, eval=False}
+ singularity exec /home/afayyaz/singularity-images/orthofinder_2.5.4.sif orthofinder -t 50 -a 10 -f /home/afayyaz/99-isolate-orth-run/ > ortho_log_file 2>&1 
+```
+  
 C. Phylogenetic Analyses
   - BEAST
-  - iTOL
-  - Robinson-Foults with ETE3 toolkit
+```{bash, eval=False}
+##used clustalo for alignment of the 1556 genes
+/home/afayyaz/bin/clustalo -i genes.fna -o genes-aligned.fasta --outfmt=fasta --threads 40
+##used the aligned file, convert it into nexus file and concatenate all of the nexus file into one file for beauti software 
+python3.8 seqmagick.py convert --output-format nexus --alphabet dna /home/afayyaz/aligned-genes-fasta/EOG***.fna /home/afayyaz/edit-genes/EOG***.nex
+python3.8 cat-nex.py
+##generated the xml file in beauti and used in Beast 
+java -jar /home/afayyaz/bin/BEASTv1.10.4/lib/beast.jar -threads 20 gene_alignment.xml
+
+##used same parameters for all of the phylogenetic trees and visulaized in iTOL
+```
+  
+  - Robinson-Foulds with ETE3 toolkit
+```{bash, eval=False}
+ete3 compare -taboutput -t 1.txt 2.txt 3.txt 4.txt 5.txt 6.txt 7.txt 8.txt 9.txt 10.txt -r 1.txt 2.txt 3.txt 4.txt 5.txt 6.txt 7.txt 8.txt 9.txt 10.txt > result.txt
+```
+  
+  
+  
 D. Pangenome
+
   - PanOCT
+```{bash, eval=Flase}
+sed 's/[^\t]*( 0.00%)//g' matchtable_id.txt > /erdos/adf/amna/matchtable_id.0_pct_removed.txt
+sed -e 's/([^()]*)//g' matchtable_id.0_pct_removed.txt > file-for-removing-paralogs.txt
+perl binary_matrix.pl file-for-removing-paralogs.txt > matrix-with-0-removed-final.txt
+##To prepare the list for removing fasta files
+awk 'BEGIN{OFS="\t"}$1="cluster"$1' paralog_list_complete.txt | awk 'BEGIN{OFS="\t"}$1=$1".txt.txt.fasta.aligned.fasta"' > test.txt
+sed -i -e 's/\r/\t/g' test.txt | sed -i -e 's/\t//g' test.txt
+###Remove paralogs from panoct-file
+Python3 script-paralogs.py
+###To sub divide the files into based on sum of genome
+awk -F"\t" '{print >> ($101".txt")}' without-paralogs.txt  
+###Use the same commands to make sepertae file for each cluster 
+awk -F"\t" '{print >> ($101".txt")}' 99.txt 
+###Cluster file converion into list file-> To convert each entry into newline, remove blank line, remove last line, remove last line
+for i in `ls cluster*`; do sed $'s/\t/\\\n/g' $i| sed '/^$/d' | sed '$d' | sed '$d' > $i.txt; done
+###To convert sequence into single line fasta
+awk '/^>/ { print (NR==1 ? "" : RS) $0; next } { printf "%s", $0 } END { printf RS }' 99-transcript.fasta > final-99-isolate-transcript.fasta
+###To grep the sequence from file
+for i in `ls cluster*.txt`; do python3 extract_seq.py final-99-isolate-transcript.fasta $i $i.fasta; done
+for i in `ls *.fasta`; do mafft --thread 20 $i > $i.aligned.fasta; done
+for i in `ls *.fasta`; do snp-sites -rmv -o $i $i; done
+for i in `ls *.vcf`; do sed 's/*/_/g' $i | awk '$0 !~ "_" {print}' | awk '{for(i=1;i<=NF;i++){if($i==0){$i="0/0"}}}{$1=$1} 1' OFS="\t" | awk '{for(i=10;i<=NF;i++){if($i==1){$i="1/1"}}}{$1=$1} 1' OFS="\t"| awk '{for(i=10;i<=NF;i++){if($i==2){$i="2/2"}}}{$1=$1} 1' OFS="\t" > $i-p.vcf; done
+for i in `ls *-p.vcf`; do vcftools --vcf $i --site-pi --out $i-nucl_diversity; done
+for i in `ls *.pi`; do sed '1d' $i > $i.txt ; done
+ls *.txt > file_list
+while read line; do awk '{sum+=$3} END {print sum/NR}' $line >> file_new; done<file_list
+mv file_new avg-values-
+cp *-aligned-files/avg* .
+for i in `ls avg-*`; do awk '{print FILENAME (NF?"\t":"") $0}' $i > $i-for-r; done
+cat *for-r > all-cluster-pi.txt
+ls *-for-r > list-avg-avg
+while read line; do awk '{sum+=$2} END {print sum/NR}' $line >> avg-avg-file; done<list-avg-avg
+while read line; do awk '{sum+=$5} END {print sum/NR}' $line >> avg-tajima-file; done<list-tajima
+for i in `ls *-p.vcf`; do vcftools --vcf $i --TajimaD 100000000 --out $i-tajimad; done
+for i in `ls *.Tajima.D`; do sed '1d' $i> $i.txt; done
+cat *.D.txt > tajima.d-6
+```
+  
 
 ## <a id="read_mapping"></a>4. Identification of SNP and genetic groups
 
