@@ -177,10 +177,15 @@ The main two parameters were missingness and minor allele frequency (MAF). MAF w
 
 ```{bash, eval=F}
 #VCF file for STRUCTURE groupings
-#vcftools --vcf ethiopia_fo_structure.vcf --maf 0.05 --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.0_05.vcf.gz
+#Note that we kept the MAF filter for the STRUCTURE groupings only because it is generally recommended.
+vcftools --vcf ethiopia_fo_structure.vcf --maf 0.05 --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.0_05.vcf.gz 
+
+############## Add that we pruned the data using PLINK too ###############
+
+#total number of SNPs = 74668
 
 #VCF file for population genetic analyses
-vcftools --vcf ethiopia_fo_structure.vcf --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.vcf.gz
+vcftools --vcf ethiopia_fo_structure.vcf --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.vcf.gz #total number of SNPs = 136772
 
 #note that this was also conducted but there were only minor differences in the outcomes. The overall clonal groupings remained the same. The LD decay curve showed minor differences
 
@@ -214,14 +219,102 @@ structure harvester (https://taylor0.biology.ucla.edu/structureHarvester/)
 
 CLUMPP/1.1.2
 
-### i. Subdividing clonal lineages in fungal populations remains challenging. Traditionally, reasearchers have determined clonality based on identical MLGs. This approach fails on a whole genome scale due to the accumulation of erroneous mutations. We employed two different methods to subdivide the lineages: phylogenetics (see Gene Annotation and Analyses - BEAST) and K clustering. 
+Subdividing clonal lineages in fungal populations remains challenging. Traditionally, reasearchers have determined clonality based on identical MLGs. This approach fails on a whole genome scale due to the accumulation of erroneous mutations. We employed two different methods to subdivide the lineages: phylogenetics (see Gene Annotation and Analyses - BEAST) and K clustering (via STRUCTURE). 
 
-  - Subsampling SNPs ~10% X10 times
-  - STRUCTURE
-  - STRUCTUREharvester - Evanno stats
-  - CLUMPP v1.1.2 merge all 10 replicates (LargeKgreedy)
-  - STRUCTURE plotted with R script
-  - Assigning clonal groupings using Euclidean distances
+### i. Random subsampling SNPs
+
+To avoid SNP selection bias, the VCF file was randomly subsampled at a rate of ~5%. 
+
+```{bash, eval=F}
+# Range(number of SNPs):
+# Subsample 1: 3756
+# Subsample 2: 3665
+# Subsample 3: 3826
+# Subsample 4: 3653
+# Subsample 5: 3764
+# Subsample 6: 3777
+# Subsample 7: 3682
+# Subsample 8: 3744
+# Subsample 9: 3784
+# Subsample 10: 3747
+
+
+bgzip -dc all_ethiopia_isolates.vcf.gz | awk 'BEGIN {srand()} !/^$/ { if (rand() <= .1) print $0}' | bgzip -c > ethiopia_fo_structure.0_05.vcf.gz_sub1.vcf.gz
+
+bgzip -dc all_ethiopia_isolates.vcf.gz | awk 'BEGIN {srand()} !/^$/ { if (rand() <= .1) print $0}' | bgzip -c > ethiopia_fo_structure.0_05.vcf.gz_sub2.vcf.gz
+
+bgzip -dc all_ethiopia_isolates.vcf.gz | awk 'BEGIN {srand()} !/^$/ { if (rand() <= .1) print $0}' | bgzip -c > ethiopia_fo_structure.0_05.vcf.gz_sub3.vcf.gz
+
+bgzip -dc all_ethiopia_isolates.vcf.gz | awk 'BEGIN {srand()} !/^$/ { if (rand() <= .1) print $0}' | bgzip -c > ethiopia_fo_structure.0_05.vcf.gz_sub4.vcf.gz
+
+#etc.
+```
+
+VCF subsample files were converted into genotype files using a manual bash script
+
+```{bash, eval=F}
+############ ./convertvcftogeno.sh #########
+#!/usr/bin/env bash
+file=$1
+out=${file}.out
+bgzip -dc ${file} | awk '$1 ~ "Super" || $1 ~ "#CHROM" {print}' | awk '$1 !~ "##" {print}' | sed 's#0/0#0#g;s#1/1#1#g;s#2/2#2#g;s#3/3#3#g;s#4/4#4#g;s#0/1#-9#g;s#0/2#-9#g;s#0/3#-9#g;s#0/4#-9#g;s#1/2#-9#g;s#1/3#-9#g;s#1/4#-9#g;s#2/3#-9#g;s#2/4#-9#g;s#3/4#-9#g;s#./.#-9#g' | cut -f 2,10- | awk '
+{ 
+    for (i=1; i<=NF; i++)  {
+        a[NR,i] = $i
+    }
+}
+NF>p { p = NF }
+END {    
+    for(j=1; j<=p; j++) {
+        str=a[1,j]
+        for(i=2; i<=NR; i++){
+            str=str" "a[i,j];
+        }
+        print str
+    }
+}' > $out
+```
+
+### ii. STRUCTURE
+  
+Ran STRUCTURE on each subsampling 10 times: burnin = 10,000 and MCMC reps = 50,000. K vals = 2-20. Check out Mainparams and Extraparams for additional technical information.
+  
+```{bash, eval=F}
+# e.g.
+#!/bin/bash
+module load structure-console/2.3.4
+structure -K 10 -o structure_large10-1-2
+```
+
+### iii. STRUCTUREharvester
+
+Using outputs of STRUCTURE, combine them using STRUCTURE_HARVESTER (online web server: http://taylor0.biology.ucla.edu/structureHarvester/) to produce .indfiles for CLUMPP.
+
+### iv. CLUMPP
+
+Ran CLUMPP on HPC cluster to collate 10 permutations of each subsample. Used LargeKGreedy algorithm.
+
+```{bash, eval=F}
+#e.g.
+#!/bin/bash
+module load CLUMPP/1.1.2
+CLUMPP K2.paramfile -i K12.indfile -k 12 -c 133 -r 10 -m 3 -w 0 -s 2 -o K12.outfile -j K12.miscfile
+```
+
+### v. STRUCTURE plotted with R script
+
+```{bash, eval=F}
+######### ./structure_plotting_larger_collection #############
+```
+
+### Clonal groups were assigned based on Euclidean distances
+
+```{bash, eval=F}
+######### ./plotting_structure_network.R ##########
+./plotting_structure_network.R --list "list of all .outfile paths" --label "list of isolate names (in order)" --title "title of graph (usually K val included)"
+```
+
+
 
 ## <a id="pop_gen"></a>5. Population Analyses
 
@@ -229,7 +322,9 @@ A. Geographic Analyses
   - Plotting onto maps in R
   - Mantel tests
 B. Linkage disequilibrium
+  - PLINK (note multiallelic SNPs automatically filtered out)
   - Additional filtering for derived SNPs and ancestral SNPs
+  /media/guy/Guy HardDrive/vcf_individuals_largerCollection/final_ld/clades
     - BASH scripts
   - LD with r2 (PLINK)
     - Inter and intra-chromosomal LD
