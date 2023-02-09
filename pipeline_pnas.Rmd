@@ -134,7 +134,7 @@ vcftools/b240116
 
 mummer/3.23
 
-For most population analyses, we exclusively used high quality genomes (based on BUSCO completeness > 97%, N50, number of scaffolds and genome size) - see "Genome Assembly". This provided a total list of 120 genomes, 99 of which were taxonomically within the FOSC (Fig. 2). This is reduced from the earlier VCF file, which contained 320 isolates (Supplemental Fig. 1)
+For most population analyses, we exclusively used high quality genomes (based on BUSCO completeness > 99%, N50, number of scaffolds and genome size) - see "Genome Assembly". This provided a total list of 120 genomes, 99 of which were taxonomically within the FOSC (Fig. 2). This is reduced from the earlier VCF file, which contained 320 isolates (Supplemental Fig. 1)
 
 Reducing the VCF file from 320 to 120, was done using bcftools (custom bash script).
 
@@ -178,7 +178,7 @@ The main two parameters were missingness and minor allele frequency (MAF). MAF w
 ```{bash, eval=F}
 #VCF file for STRUCTURE groupings
 #Note that we kept the MAF filter for the STRUCTURE groupings only because it is generally recommended.
-vcftools --vcf ethiopia_fo_structure.vcf --maf 0.05 --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.0_05.vcf.gz 
+#vcftools --vcf ethiopia_fo_structure.vcf --maf 0.05 --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.0_05.vcf.gz 
 
 ############## Add that we pruned the data using PLINK too ###############
 
@@ -223,21 +223,10 @@ Subdividing clonal lineages in fungal populations remains challenging. Tradition
 
 ### i. Random subsampling SNPs
 
-To avoid SNP selection bias, the VCF file was randomly subsampled at a rate of ~5%. 
+To avoid SNP selection bias, the VCF file was randomly subsampled at a rate of ~10%. 
+Note that this script does not provide exactly 10% of the total number of SNPs (Table 1 - Non-clone corrected = 136)
 
 ```{bash, eval=F}
-# Range(number of SNPs):
-# Subsample 1: 3756
-# Subsample 2: 3665
-# Subsample 3: 3826
-# Subsample 4: 3653
-# Subsample 5: 3764
-# Subsample 6: 3777
-# Subsample 7: 3682
-# Subsample 8: 3744
-# Subsample 9: 3784
-# Subsample 10: 3747
-
 
 bgzip -dc all_ethiopia_isolates.vcf.gz | awk 'BEGIN {srand()} !/^$/ { if (rand() <= .1) print $0}' | bgzip -c > ethiopia_fo_structure.0_05.vcf.gz_sub1.vcf.gz
 
@@ -253,7 +242,7 @@ bgzip -dc all_ethiopia_isolates.vcf.gz | awk 'BEGIN {srand()} !/^$/ { if (rand()
 VCF subsample files were converted into genotype files using a manual bash script
 
 ```{bash, eval=F}
-############ ./convertvcftogeno.sh #########
+############ ./convertvcftogeno.sh ############
 #!/usr/bin/env bash
 file=$1
 out=${file}.out
@@ -315,21 +304,178 @@ CLUMPP K2.paramfile -i K12.indfile -k 12 -c 133 -r 10 -m 3 -w 0 -s 2 -o K12.outf
 ```
 
 
-
 ## <a id="pop_gen"></a>5. Population Analyses
 
-A. Geographic Analyses
-  - Plotting onto maps in R
-  - Mantel tests
-B. Linkage disequilibrium
-  - PLINK (note multiallelic SNPs automatically filtered out)
-  - Additional filtering for derived SNPs and ancestral SNPs
+### A. Geographic Analyses
+
+### i. Plotting onto maps in R
+
+To create plots of geographic sampling (both chickpea and Fungal sampling)
+
+```{bash, eval=F}
+######### ./geo_plot_ethiopia.R ###########
+```
+
+### ii. Mantel tests
+
+The Mantel test is a measure of correlation between two distance matrices. Here we want to understand how genetic difference (both sequence and presence/absence variation) is correlated with geography.
+  
+```{r}
+#####################################################################################
+############################ Need input from Amna ###################################
+#####################################################################################
+```
+  
+  
+### B. Linkage disequilibrium
+
+We calculated linkage disequilibrium using two different methods:
+
+1. Pearson's correlation coefficient (r2) [implemented in PLINK]
+2. Index of association (rbarD) [implemented in PoppR]
+
+### i. Linkage Disequilibrium via r2
+
+Tools required:
+
+plink/1.90
+
+bcftools/1.16
+
+#### Preparing datasets for "clonally-derived" vs "ancestrally-derived" SNPs (Figure 4 and Table 1)
+
+"Clonally-derived" SNPs are variants that are variable within clonal subgroups. 
+
+"Ancestrally-derived" SNPs are variants that are fixed within clonal subgroups 
+
+To do this, we separated the final VCF file (See Filtering VCF) into the subgroups defined by BEAST (phylogenetics) and STRUCTURE (K clustering).
+
+1. Split the VCf file into groups
+
+```{bash, eval=F}
+######## ./splitting_vcfs_retaining.sh ###########
+
+#!/usr/bin/env bash
+for file in *.vcf.gz; do
+  for sample in `bcftools query -l $file`; do
+    bcftools view -Oz -s $sample -o ${file/.vcf*/.$sample.vcf.gz} $file
+  done
+done
+```
+
+2. Combine into VCF files on a clade basis using BCFtools
+
+```{bash, eval=F}
+#e.g. This is an example for clonal subgroup E. Note that this was done for all groups E-U
+#note that "clade_e.txt" is a text file containing the list of isolates contained in subgroup E
+bcftools merge -l clade_e.txt > clade_e.vcf.gz
+```
+
+3. Filtering step for clonally-derived SNPs
+```{bash, eval=F}
+bgzip -dc  $group.vcf.gz | // #input file lineages
+awk '($0 ~ "1/1" && $0 ~ "0/0") || ($0 ~ "1/1" && $0 ~ "2/2") || //
+($0 ~ "2/2" && $0 ~ "0/0") || ($0 ~ "3/3" && $0 ~ "0/0") || //
+($0 ~ "4/4" && $0 ~ "0/0") || ($0 ~ "3/3" && $0 ~ "1/1") || //
+($0 ~ "4/4" && $0 ~ "1/1") || ($0 ~ "3/3" && $0 ~ "2/2") || //
+($0 ~ "4/4" && $0 ~ "2/2") || ($0 ~ "3/3" && $0 ~ "4/4") || //
+$1 ~ /#/ {print $0}' | bgzip -c > $output.vcf.gz #output SNPs variable across each clonal group
+#note that these files were used to generate Figure 4C (decay plot for each clonal lineage)
+
+bcftools merge -l $(ls clade*) > var_clones.vcf.gz
+```
+
+4. Filtering step for ancestrally-derived SNPs
+
+```{bash, eval=F}
+#filter across clonal subgroup
+for F in *.vcf.gz; do bgzip -dc $F | //
+awk '{for(i=11;i<=NF;i++)if($i!=$(i-1)&&$1!~/#/)next}1' | //
+bgzip -c > ${F}_filtered.vcf.gz; done #output SNPs fixed across entire clonal group
+
+#choose one sequence from the subgroup VCF files
+for F in *_filtered.vcf.gz; do bgzip -dc $F | //
+cut -f 1-11 | //
+bgzip -c > ${F}_represent.vcf.gz; done
+
+#merge representative isolates
+bcftools merge -l $(ls *_represent.vcf.gz) > eth_clonecorrected.vcf.gz
+```
+
+#### Linkage disequilibrium - r2
+
+1. Run intra-chromosomal PLINK LD
+
+```{bash, eval=F}
+#code for clonally-derived SNPs
+plink --vcf var_clones.vcf.gz --allow-extra-chr --r2 //
+--ld-window-r2 0 --ld-window 99999 --out var_clone
+
+#code for ancestrally-derived SNPs
+plink --vcf total_clone.vcf.gz --allow-extra-chr --r2 --ld-window 99999 //
+--ld-window-r2 0 --out total_clone
+
+#note that PLINK automatically retains only biallelic 
+
+#calculating bp difference from PLINK LD output
+for f in *.ld; do awk -F' ' '{print $1, $2, $5, $7, ($2-$5) }' $f | sed 's/-//g;s/ /\t/g' > diff_calculated/$f.diff; done
+
+#filtering for bp difference <75000 (saves memory to permit R-based analysis)
+for f in *diff; do awk '($5 < 75000) {print}' $f > rm_large_diffs/$f.75000.ld; done
+
+#rest of plotting done in R
+```
+
+2. Run inter-chromosomal PLINK LD
+
+Since inter-chromosomal SNPs can create unreasonably large file sizes (>100GB), we subset the SNP files before running
+
+```{bash, eval=F}
+#selects ~2.5% of the total SNPs (~2000-3000 SNPs)
+#run on both var_clone.vcf.gz and eth_clonecorrected.vcf.gz
+awk 'BEGIN {srand()} !/^$/ { if (rand() <= .025 || FNR==1) print $0}' $IN.vcf.gz > $OUT-filtered.vcf.gz
+
+#calculating interchromosomal LD
+plink --vcf var_clone.vcf.gz-filtered.vcf.gz --allow-extra-chr --inter-chr --r2 //
+--ld-window-r2 0 --out var_clone_inter
+
+#calculating interchromosomal LD
+plink --vcf eth_clonecorrected.vcf.gz-filtered.vcf.gz --allow-extra-chr --inter-chr --r2 //
+--ld-window-r2 0 --out total_clone_inter
+
+#mean of each LD was calculated (background LD)
+# file.ld = any inter-chromosomal PLINK LD output
+count=0; total=0; for i in $( awk '{ print $7; }' file.ld );\
+do total=$(echo $total+$i | bc ); \
+((count++)); done; echo "scale=2; $total / $count" | bc
+```
+
+3. Plotting r2 decay curves and genome-wide r2
+
+r2 decay plots
+
+```{r, eval=F}
+############# ld_decay_final_04-27.Rmd ##################
+```
+
+r2 genome-wide plots
+
+```{r, eval=F}
+############## making_ld_windows.Rmd ###############
+```
+
   /media/guy/Guy HardDrive/vcf_individuals_largerCollection/final_ld/clades
     - BASH scripts
   - LD with r2 (PLINK)
     - Inter and intra-chromosomal LD
     - Genome-wide LD across genome
+    
+### ii. Linkage Disequilibrium via rbarD
   - LD with rbarD (Poppr)
+  
+  
+  
+  
 C. Nucleotide Diversity (pi)
 D. Tajima's D
 E. Fst (Weighted)
