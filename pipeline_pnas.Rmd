@@ -128,11 +128,11 @@ Tools required:
 
 Tools required:
 
-bcftools/1.16
+- bcftools/1.16
 
-vcftools/b240116
+- vcftools/b240116
 
-mummer/3.23
+- mummer/3.23
 
 For most population analyses, we exclusively used high quality genomes (based on BUSCO completeness > 99%, N50, number of scaffolds and genome size) - see "Genome Assembly". This provided a total list of 120 genomes, 99 of which were taxonomically within the FOSC (Fig. 2). This is reduced from the earlier VCF file, which contained 320 isolates (Supplemental Fig. 1)
 
@@ -213,15 +213,15 @@ Rscript ./mummer_coverage.R
 
 Tools required:
 
-structure-console/2.3.4
+- structure-console/2.3.4
 
-structure harvester (https://taylor0.biology.ucla.edu/structureHarvester/)
+- structure harvester (https://taylor0.biology.ucla.edu/structureHarvester/)
 
-CLUMPP/1.1.2
+- CLUMPP/1.1.2
 
 Subdividing clonal lineages in fungal populations remains challenging. Traditionally, reasearchers have determined clonality based on identical MLGs. This approach fails on a whole genome scale due to the accumulation of erroneous mutations. We employed two different methods to subdivide the lineages: phylogenetics (see Gene Annotation and Analyses - BEAST) and K clustering (via STRUCTURE). 
 
-### i. Random subsampling SNPs
+### i. <a id="struct"></a>Random subsampling SNPs
 
 To avoid SNP selection bias, the VCF file was randomly subsampled at a rate of ~10%. 
 Note that this script does not provide exactly 10% of the total number of SNPs (Table 1 - Non-clone corrected = 136)
@@ -338,9 +338,9 @@ We calculated linkage disequilibrium using two different methods:
 
 Tools required:
 
-plink/1.90
+- plink/1.90
 
-bcftools/1.16
+- bcftools/1.16
 
 #### Preparing datasets for "clonally-derived" vs "ancestrally-derived" SNPs (Figure 4 and Table 1)
 
@@ -455,7 +455,7 @@ do total=$(echo $total+$i | bc ); \
 r2 decay plots
 
 ```{r, eval=F}
-############# ld_decay_final_04-27.Rmd ##################
+############# ld_decay.R ##################
 ```
 
 r2 genome-wide plots
@@ -464,19 +464,37 @@ r2 genome-wide plots
 ############## making_ld_windows.Rmd ###############
 ```
 
-  /media/guy/Guy HardDrive/vcf_individuals_largerCollection/final_ld/clades
-    - BASH scripts
-  - LD with r2 (PLINK)
-    - Inter and intra-chromosomal LD
-    - Genome-wide LD across genome
-    
-### ii. Linkage Disequilibrium via rbarD
-  - LD with rbarD (Poppr)
-  
-  
-  
-  
-C. Nucleotide Diversity (pi)
+Files found in /media/guy/Guy HardDrive/vcf_individuals_largerCollection/final_ld/clades
+
+### ii. Linkage disequilibrium - rbarD
+
+To complement the Pearson's correlation coefficient (r2) LD data, we included the index of association (rbarD)(Agapow and Burt, 2001)
+
+One issue that we experienced with this metric though is that it is very computationally intensive (at least in PoppR). As a result, most SNP sets had to be downsampled to a size of ~3000 SNPs
+
+We used the same subsamples as for [STRUCTURE](#struct). As a result, the rbarD calculations were averaged over the 10 subsamples.
+
+We used PoppR (Kamvar et al, 2014) to run rbarD. The VCF files were converted into geno files using vcfR (Knaus et al, 2017)
+
+The generalized framework for calculating the index of association (rbarD) in R:
+
+![Insert image of pipeline]
+
+
+## C. Nucleotide Diversity (pi)
+
+Tools required:
+
+- vcftools/b240116
+
+Nucleotide diversity (pi) was calculated from VCF files (both [read-mapped](#read_mapping) and [BUSCO](#gene_annotation)) using VCFtools (Danecek et al, 2011)
+
+```{bash, eval=F}
+
+```
+
+
+
 D. Tajima's D
 E. Fst (Weighted)
   - Core SNP Fst
