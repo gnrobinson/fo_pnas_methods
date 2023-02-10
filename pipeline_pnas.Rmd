@@ -73,7 +73,7 @@ A. Average nucleotide identity calculated with Pyani
 B. Annotation
  - RepeatModeler
  
-```{bash, eval=False}
+```{bash, eval=F}
 ## to generate library for custom repeats using RepeatModeler
  $:/home/localhost/adf/sw/bin/singularity shell /erdos/adf/sw/singularityImages/repeatmodeler-1.0.11--pl5.22.0_0.img
 
@@ -83,7 +83,7 @@ B. Annotation
 ```
 
   - MAKER
-```{bash, eval=False}
+```{bash, eval=F}
 ##structural annotation
 i=`ls *.fasta`
 for j in $i; do  maker -g $j 2>&1 | tee round1_$j.log ; done
@@ -158,13 +158,13 @@ cut -d'|' -f1,1 Fo-Et-0000.all.maker.transcripts.fasta | sed 's!-RA!!g' >> Fo-Et
   - Gene Enrichment with BLAST2GO????
   - SIX genes homologs BLASTp????
   - Orthologs identified with Orthofinder (default excpt with -msa)
-```{bash, eval=False}
+```{bash, eval=F}
  singularity exec /home/afayyaz/singularity-images/orthofinder_2.5.4.sif orthofinder -t 50 -a 10 -f /home/afayyaz/99-isolate-orth-run/ > ortho_log_file 2>&1 
 ```
   
 C. Phylogenetic Analyses
   - BEAST
-```{bash, eval=False}
+```{bash, eval=F}
 ##to extract the single copy gene names/list form BUSCO results
 perl busco_find_conserved_single_copy_across_all.pl run_*/full_table* > busco_find_conserved_single_copy_across_all.txt
 ##to extract the fasta sequences from the 
@@ -181,7 +181,7 @@ java -jar /home/afayyaz/bin/BEASTv1.10.4/lib/beast.jar -threads 20 gene_alignmen
 ```
   
   - Robinson-Foulds with ETE3 toolkit
-```{bash, eval=False}
+```{bash, eval=F}
 
 ##calling SNP's on 1556 BUSCO single copy genes
 for i in `ls *.fasta`; do snp-sites -rmv -o $i $i; done
@@ -266,10 +266,10 @@ java -jar /home/afayyaz/bin/BEASTv1.10.4/lib/beast.jar -threads 20 gene_alignmen
 ete3 compare -taboutput -t 1.txt 2.txt 3.txt 4.txt 5.txt 6.txt 7.txt 8.txt 9.txt 10.txt -r 1.txt 2.txt 3.txt 4.txt 5.txt 6.txt 7.txt 8.txt 9.txt 10.txt > result.txt
 ```
   
-D. Pangenome
+D. <a id="pangenome"></a>Pangenome
 
   - PanOCT
-```{bash, eval=Flase}
+```{bash, eval=F}
 ###Remove paralogs from panoct result file
 Python3 script-paralogs.py
 ###To make the files of each cluster in the pangenome containing number of genomes from 5 to 99
@@ -316,7 +316,7 @@ Tools required:
 - Picard 
 - GATK v4.1
 
-```{bash, eval=FALSE}
+```{bash, eval=F}
 #create index for F. oxysporum reference genome (Fol4287 - GCF_000149955.1)
 bwa index [-a bwtsw|is] reference.fasta index_prefix
 samtools faidx reference.fasta
@@ -706,18 +706,49 @@ Tools required:
 
 - vcftools/b240116
 
-Nucleotide diversity (pi) was calculated from VCF files (both [read-mapped](#read_mapping) and [BUSCO](#gene_annotation)) using VCFtools (Danecek et al, 2011)
+Nucleotide diversity (pi) was calculated from VCF files (both [read-mapping](#read_mapping) and [BUSCO](#gene_annotation)) using VCFtools (Danecek et al, 2011)
 
 ```{bash, eval=F}
+vcftools --gzvcf $IN.vcf.gz --window-pi  10000 --out $OUT 
+```
 
+## D. Tajima's D
+
+Tools required:
+
+- vcftools/b240116
+
+Tajima's D was calculated from VCF files for [read-mapping](#read_mapping) directly using VCFtools (Danecek et al, 2011). The Tajima's D analysis calculated for the pangenome required additional steps and so is described above under "[Pangenome](#pangenome)".
+
+For the readmapping VCF files, Tajima's D was calculated per SNP. These were then averaged across the genome in R.
+
+```{bash, eval=F}
+vcftools --gzvcf $IN.vcf.gz --TajimaD  1 --out $OUT 
 ```
 
 
+## E. Genetic Differentiation (Fst) (Weighted)
 
-D. Tajima's D
-E. Fst (Weighted)
-  - Core SNP Fst
-  - Pangenome Fst
-  - BUSCO Fst
+Genetic differentiation (Fst) is a commonly used proxy to determine gene flow between multiple populations, because more gene flow = lower genetic differentiation. 
+
+We wanted to understand the levels of genetic differentiation between different clonal subgroups (and therefore estimate the level of gene flow between purely clonal lineages). The idea behind this is to understand whether gene flow is still ongoing even after a transition to clonality. As a result, the Fst of sequence variation (core SNPs) was compared to presence/absence variation. Hypothesis: If horizontal gene transfer is ongoing, we expect to see lower genetic differentiation between clonal subgroups that core SNP variation. Furthermore, they should display different demographic histories (i.e. the two Fst sets should be correlated). 
+
+To account for genic selection, we included a supplemental figure displaying sequence variation of conserved orthologs. This should serve as a sandwich with the core gene Fst (under highest purifying selection) and core read-mapped Fst (under no selection) serving as the two extremes. If selection is the only reason for differentiation, we expect that the accessory gene variation to be sandwiched between these two extremes. 
+
+We used custom R scripts to calculate weighted Fst values. The input files for each R script are VCF files (haplotype) or presence/absence matrix (coverage) containing only specified subgroups.
+
+```{bash, eval=F}
+#sequence variation (core genes and core SNPs)
+# input is any VCF file
+############# calculating_haplotype_diversity.R ##################
+Rscript ./calculating_haplotype_diversity.R --populationa $clonal_lineageA.vcf --populationb $clonal_lineageB.vcf > $OUT
+
+
+#presence/absence variation (accessory genes)
+############# calculating_coverage_diversity.R ##################
+Rscript ./calculating_coverage_diversity.R --populationa $clonal_lineageA.txt --populationb $clonal_lineageB.txt > $OUT
+
+```
+
 
 ## <a id="refs"></a>6. References
