@@ -39,7 +39,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## <a id="Overview"></a>1. Overview
 
-Plot overview pipeline
+![](pipeline_pnas_overview.png)
 
 ## <a id="assembly"></a>2. Genome Assembly
 
@@ -395,21 +395,13 @@ To ensure that the subsequent VCF was high quality, especially for linkage diseq
 The main two parameters were missingness and minor allele frequency (MAF). MAF was of particular importance to us, as often researchers adjust MAF cutoff as >0.05 without regard for the effects on the population. 
 
 ```{bash, eval=F}
-#VCF file for STRUCTURE groupings
-#Note that we kept the MAF filter for the STRUCTURE groupings only because it is generally recommended.
-#vcftools --vcf ethiopia_fo_structure.vcf --maf 0.05 --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.0_05.vcf.gz 
-
-############## Add that we pruned the data using PLINK too ###############
-
-#total number of SNPs = 74668
-
 #VCF file for population genetic analyses
 vcftools --vcf ethiopia_fo_structure.vcf --max-missing 0.9 --recode --stdout | bgzip -c > all_ethiopia_isolates.vcf.gz #total number of SNPs = 136772
-
-#note that this was also conducted but there were only minor differences in the outcomes. The overall clonal groupings remained the same. The LD decay curve showed minor differences
-
-#include plot /home/guy/Documents/Research/Cook/fusarium_pnas_final/old/Linkage/ld_total_maf.png
 ```
+
+This filtering step was evaluated to understand the effects of using MAF cutoffs (no MAF filter vs "typical" MAF >0.05). There were only minor differences in the outcomes. The clonal groupings remained the same. The LD decay curve only showed minor differences (see below)
+
+![](ld_total_maf.png)
 
 ### vi. To ensure SNPs were core components of the genome, mapping was informed by additional whole genome alignments (MUMmer)
 
@@ -534,6 +526,11 @@ To create plots of geographic sampling (both chickpea and Fungal sampling)
 ```{bash, eval=F}
 ######### ./geo_plot_ethiopia.R ###########
 ```
+
+![](pipeline_figure1.gif)
+![](pipeline_geog_subgroups.gif) 
+
+![](pipeline_geog_mat.png)
 
 ### ii. Mantel tests
 
@@ -677,13 +674,15 @@ r2 decay plots
 ############# ld_decay.R ##################
 ```
 
+![](pipeline_ld_decay_figures.gif)
+
 r2 genome-wide plots
 
 ```{r, eval=F}
 ############## making_ld_windows.Rmd ###############
 ```
 
-Files found in /media/guy/Guy HardDrive/vcf_individuals_largerCollection/final_ld/clades
+![](pipeline_ld_across_window.gif)
 
 ### ii. Linkage disequilibrium - rbarD
 
@@ -697,7 +696,127 @@ We used PoppR (Kamvar et al, 2014) to run rbarD. The VCF files were converted in
 
 The generalized framework for calculating the index of association (rbarD) in R:
 
-![Insert image of pipeline]
+```{r, eval=FALSE}
+##########################################################################
+## For full code, see ./ia_analysis.Rmd. Here is an example of how the ###
+## index of association (rbarD) was calculated using Poppr. This example #
+## contains only Subsample 1. ############################################
+##########################################################################
+
+#load required libraries
+library(tidyverse)
+library(RColorBrewer)
+library(ggplot2)
+library(vcfR)
+library(adegenet)
+library(poppr)
+library(magrittr)
+
+##############################################################################
+#function to prep VCF data
+file_prep <- function(file) {
+  isolate_vcf <- read.vcfR(file = file, verbose = FALSE) #import vcf file (can also be vcf.gz)
+  isolate_genind <- vcfR2genind(isolate_vcf) #converts vcf into genind format
+  isolate_genind$other$lineage <- c("SING", "SING", "SING", "SING", "SING", "T", "SING", "T", "O", "SING", "Q", "Q", "O", "J", "N", "SING", "N", "M", "M", "N", "SING", "P", "SING", "K", "N", "T", "Q", "SING", "P", "T", "N", "N", "P", "J", "J", "SING", "SING", "S", "S", "SING", "O", "SING", "SING", "T", "P", "T", "P", "R", "SING", "SING", "SING", "O", "R", "SING", "SING", "U", "SING", "SING", "E", "SING", "SING", "Q", "SING", "R", "O", "Q", "R", "SING", "SING", "R", "R", "R", "SING", "Q", "SING", "SING", "R", "O", "I", "M", "R", "E", "H", "SING", "G", "H", "F", "SING", "H", "SING", "L", "L", "O", "H", "H", "P", "R", "SING", "O", "T", "K", "E", "O", "SING", "O", "SING", "F", "G", "G", "M", "O", "Q", "P", "E", "T", "K", "R", "R", "SING", "O", "I", "U", "E", "SING", "P", "P", "R", "SING", "N", "R", "O", "O", "SING") #predetermined lineages from STRUCTURE and phylogenetic analysis
+  pop(isolate_genind) <- isolate_genind$other$lineage #assigns lineages as populations
+  isolate_genclone <- as.genclone(isolate_genind) #creates genclone file for poppr analysis
+}
+
+###################################################################
+ss1 <- file_prep("subsample_1.vcf")
+#etc.
+# All 10 subsamples were loaded into R like this.
+# (Subsample #) : (# of SNPs)
+# Subsample 1 : 3756
+# Subsample 2 : 3665
+# Subsample 3 : 3826
+# Subsample 4 : 3653
+# Subsample 5 : 3764
+# Subsample 6 : 3777
+# Subsample 7 : 3682
+# Subsample 8 : 3744
+# Subsample 9 : 3784
+# Subsample 10 : 3747
+
+###################################################################
+# non-clone corrected Ia and Rbar calculations
+set.seed(100)
+resmpl_ia_ss1 <- resample.ia(ss1, reps = 999, n=132)
+#etc.
+
+#combine all subsampled data together
+resmpl_ia_all <- rbind(resmpl_ia_ss1,
+    resmpl_ia_ss2,
+    resmpl_ia_ss3,
+    resmpl_ia_ss4,
+    resmpl_ia_ss5,
+    resmpl_ia_ss6,
+    resmpl_ia_ss7,
+    resmpl_ia_ss8,
+    resmpl_ia_ss9,
+    resmpl_ia_ss10)
+
+  write_delim(resmpl_ia_all, file = "results/all_isolates_ia_vals.txt", delim = "\t")
+resmpl_ia_all <- read_delim("results/all_isolates_ia_vals.txt", delim = "\t")
+std(resmpl_ia_all$rbarD)
+
+
+t <- ggplot(resmpl_ia_all, aes(x = rbarD)) +
+  geom_histogram(bins=100) +
+  geom_vline(xintercept = ia(ss1)[2]) +
+#  geom_vline(xintercept = 0.0702, linetype=2) +
+  geom_vline(xintercept = ia(clonecorrect(ss1))[2], linetype = 2) +
+  xlab(expression(bar(r)[d]))
+t
+
+######################################################################
+#separating populations before index of association calculation
+obj1 <- seppop(ss1) #separates the genclone objects into a list of different populations specified earlier
+#etc.
+
+####SS1
+sing_genclone1 <- obj1$SING
+e_genclone1 <- obj1$E
+f_genclone1 <- obj1$F
+g_genclone1 <- obj1$G
+h_genclone1 <- obj1$H
+i_genclone1 <- obj1$I
+k_genclone1 <- obj1$K
+l_genclone1 <- obj1$L
+m_genclone1 <- obj1$M
+n_genclone1 <- obj1$N
+o_genclone1 <- obj1$O
+p_genclone1 <- obj1$P
+q_genclone1 <- obj1$Q
+r_genclone1 <- obj1$R
+s_genclone1 <- obj1$S
+t_genclone1 <- obj1$T
+
+# calculate Ia and rbarD for subgroup E, subsample 1
+resmpl_ia_ss1_e <- resample.ia(e_genclone1, reps = 999, n=(nrow(as.data.frame(e_genclone1))-1))
+#etc. 
+# calculated for all other subsamples (E) too
+#combined all subsamples for subgroup E together
+
+resmpl_ia_e <- rbind(resmpl_ia_ss1_e,
+    resmpl_ia_ss2_e,
+    resmpl_ia_ss3_e,
+    resmpl_ia_ss4_e,
+    resmpl_ia_ss5_e,
+    resmpl_ia_ss6_e,
+    resmpl_ia_ss7_e,
+    resmpl_ia_ss8_e,
+    resmpl_ia_ss9_e,
+    resmpl_ia_ss10_e)
+
+# save data for subgroup E
+write_delim(resmpl_ia_e, file = "results/E_isolates_ia_vals.txt", delim = "\t")
+
+
+###### calculated for all other subgroups too #########
+
+# Averages (Mean) and Standard Deviations were calculated in R #
+```
 
 
 ## C. Nucleotide Diversity (pi)
