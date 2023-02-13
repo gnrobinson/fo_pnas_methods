@@ -33,10 +33,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ---
 
-## Help with Rmarkdown
-### https://holtzy.github.io/Pimp-my-rmd/
-### https://www.rstudio.com/wp-content/uploads/2015/02/rmarkdown-cheatsheet.pdf
-
 ## <a id="Overview"></a>1. Overview
 
 ![](pipeline_pnas_overview.png)
@@ -55,20 +51,19 @@ C. Error correction using ALLPATHS-LG
 D. Assembly using A5
 E. Genome completeness assessed using BUSCO v3 (Ascomycota odb9 dataset)
 ```{bash, eval=F}
-## parameters to use for runnig BUSCO
+## parameters to use for running BUSCO
 docker run -it --rm -v $(pwd):/home/working -w /home/working chrishah/busco-docker run_BUSCO.py --in ./Fusarium_oxysporum.fasta --out Fusairum-BUSCO -l ./sordariomyceta_odb9 --mode genome --sp fusarium_graminearum --c 20
 ```
 
 
 ## <a id="gene_annotation"></a>3. Gene Annotation and Analyses
 
-```{r, eval=F}
-#####################################################################################
-######################### Need input from Amna/Peter ################################
-#####################################################################################
+A. Average nucleotide identity calculated with Pyani
+
+```{bash, eval=F}
+/home/afayyaz/bin/singularity run /home/afayyaz/singularityImages/average_nucleotide_identity-v0.2.9.simg -i all-genomes/ -g -m ANIb --workers 20 -o pyani-results
 ```
 
-A. Average nucleotide identity calculated with Pyani
 
 B. Annotation
 The annotation was done By using MAKER,RepeatModeler, iprscan, Blastp and AHRD
@@ -263,13 +258,13 @@ ete3 compare -taboutput -t 1.txt 2.txt 3.txt 4.txt 5.txt 6.txt 7.txt 8.txt 9.txt
   
 D. <a id="pangenome"></a>Pangenome
   Pangenome was constructed using PanOCT software with percentage identity threshold 95% 
-```{bash, eval=Flase}
+```{bash, eval=F}
 singularity exec /home/afayyaz/singularity-images/panoct_3.23--pl526_1.sif panoct.pl -t blast-results.txt -g final-e-attribute.txt -P 99-all-protein.pep -f list-e.txt -b /home/afayyaz/group-e-panoct/ -i 95 -L 20 -M Y -F 1.33 -N Y -H Y -V Y -S Y -C Y -B Y -c 0,5,25,50,75,90,95,98,100 > panoct-test 2>&1
 ```
   
 Before we calculated the nucleotide diversity for pan-genome, we removed the paralogs from the gene presence absence file
  
-```{bash, eval=Flase}
+```{bash, eval=F}
 ###Removed paralogs from panoct result file
 Python3 script-paralogs.py
 ###To calculate nucleotide diversity for pan-genome, we needed the files of each cluster in the pangenome containing number of genomes from 5 to 99
@@ -539,7 +534,7 @@ To create plots of geographic sampling (both chickpea and Fungal sampling)
 
 The Mantel test is a measure of correlation between two distance matrices. Here we want to understand how genetic difference (both sequence and presence/absence variation) is correlated with geography.
   
-```{r}
+```{r, eval=F}
 ##We prepared the co-ordinates for all infected sample into data frame for mental test
 library(ade4)
 location = read.delim("location-for-distance-plot-99-isolates.txt")
@@ -720,7 +715,7 @@ We used PoppR (Kamvar et al, 2014) to run rbarD. The VCF files were converted in
 
 The generalized framework for calculating the index of association (rbarD) in R:
 
-```{r, eval=FALSE}
+```{r, eval=F}
 ##########################################################################
 ## For full code, see ./ia_analysis.Rmd. Here is an example of how the ###
 ## index of association (rbarD) was calculated using Poppr. This example #
