@@ -11,7 +11,7 @@ output:
   #  lightbox: true
   #  gallery: true
   #  highlight: tango
-  html_document: default
+  #html_document: default
   #pdf_document: default
 ---
 
@@ -33,22 +33,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ---
 
-## <a id="Overview"></a>1. Overview
+# <a id="Overview"></a>1. Overview
 
 ![](pipeline_pnas_overview.png)
 
-## <a id="assembly"></a>2. Genome Assembly
+---
 
-Tools required
+# <a id="assembly"></a>2. Genome Assembly
 
+Tools required:
+- Singularity v3.5.2
 - FastQC v0.11.9
-
-- Trimmomatic v0.39
-
+- Trimmomatic v0.36
 - ALLPATHS-LG v52488
-
 - A5
-
+- FCG-GX
 - BUSCO v3
 
 ### A. Quality check with FastQC
@@ -59,28 +58,102 @@ fastqc $IN.fastq.gz
 ```
 
 ### B. Low quality reads and adapters trimmed using Trimmomatic v36
+
+```{bash, eval=F}
+mkdir results/trimmomatic/"$SAMPLE"
+
+java -jar bin/Trimmomatic-0.36/trimmomatic-0.36.jar PE -phred33 \
+data/atsede-redo-libs/"$SAMPLE"_L006_R1_001.fastq.gz \
+data/atsede-redo-libs/"$SAMPLE"_L006_R2_001.fastq.gz \
+results/trimmomatic/"$SAMPLE"/"$SAMPLE".R1.paired.fastq.gz \
+results/trimmomatic/"$SAMPLE"/"$SAMPLE".R1.unpaired.fastq.gz \
+results/trimmomatic/"$SAMPLE"/"$SAMPLE".R2.paired.fastq.gz \
+results/trimmomatic/"$SAMPLE"/"$SAMPLE".R2.unpaired.fastq.gz \
+ILLUMINACLIP:bin/Trimmomatic-0.36/adapters/NexteraPE-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
+
+```
+
 ### C. Error correction using ALLPATHS-LG
+
+```{bash, eval=F}
+#ALLPATHS-LG was run with default parameters
+#e.g.
+ErrorCorrectReads.pl read_p1.fastq.gz read_p2.fastq.gz PHRED_ENCODING=33 READS_OUT=$OUT
+```
+
 ### D. Assembly using A5
-### E. Genome completeness assessed using BUSCO v3 (Ascomycota odb9 dataset)
+
+```{bash, eval=F}
+#A5 was run with default parameters
+#e.g.
+a5_pipeline.pl read_p1.fastq.gz read_p2.fastq.gz mygenome
+```
+
+### E. Contaminant identification using FCS-GX
+
+To identify and remove contaminants from assemblies, we used NCBI's FCS-GX (available at https://github.com/ncbi/fcs)
+This program screens for contaminants by identifying contigs/scaffolds that do not originate from the biological source organism (as defined by Refseq)
+
+```{bash, eval=F}
+#load singularity
+module load singularity
+module load python3/3.7.4
+
+#gathering fcs-gx singularity image
+curl -LO https://github.com/ncbi/fcs/raw/main/dist/run_fcsgx.py
+curl -LO https://github.com/ncbi/fcs/raw/main/examples/fcsgx_test.fa.gz
+curl https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/FCS/releases/0.3.0/fcs-gx.0.3.0.sif -Lo fcsgx.sif
+
+#create temporary shared memory
+SHM_LOC=/home/melland/cook/long_read/PB852_4plex_Fusarium_HiFiv3/r64069_20230119_233108/A1/DemuxBarcodes/outputs/assemblies_hifiasm/contaminant_removal
+mkdir -p "${SHM_LOC}/gxdb"
+mkdir -p ./gxdb
+mkdir -p ./gx_out
+
+#verify functionality using small test-only database
+#python3 ./run_fcsgx.py --fasta ./fcsgx_test.fa.gz --out-dir ./gx_out/ --gx-db "${SHM_LOC}/gxdb/test-only" --gx-db-disk ./gxdb --split-fasta --tax-id 6973 --container-engine=singularity --image=fcsgx.sif
+
+#do full contamination analysis
+#uses manifest file containing list of all fasta files paths
+python3 ./run_fcsgx.py --fasta ./manifest_fo.mft --out-dir ./gx_out/ --gx-db "${SHM_LOC}/gxdb/all" --split-fasta --tax-id 5507 --container-engine=singularity --image=fcsgx.sif
+
+# all contaminant contigs/scaffolds were removed unless they contained a bonafide Fusarium oxysporum gene (>95% identity)
+```
+
+
+### F. Genome completeness assessed using BUSCO v3 (Ascomycota odb9 dataset)
+
 ```{bash, eval=F}
 ## parameters to use for running BUSCO
 docker run -it --rm -v $(pwd):/home/working -w /home/working chrishah/busco-docker run_BUSCO.py --in ./Fusarium_oxysporum.fasta --out Fusairum-BUSCO -l ./sordariomyceta_odb9 --mode genome --sp fusarium_graminearum --c 20
 ```
 
+---
 
-## <a id="gene_annotation"></a>3. Gene Annotation and Analyses
+# <a id="gene_annotation"></a>3. Gene Annotation and Analyses
 
-A. Average nucleotide identity calculated with Pyani
+Tools required:
+- Pyani v0.2.9
+- RepeatModeler v1.0.11
+- MAKER v2.31
+- Interproscan v5.46
+- BLASTp v2.7.1
+- AHRD v2.0
+- BLAST2GO GUI (https://www.blast2go.com/)
+- Orthofinder v2.5.4
+
+### A. Average nucleotide identity calculated with Pyani
 
 ```{bash, eval=F}
 /home/afayyaz/bin/singularity run /home/afayyaz/singularityImages/average_nucleotide_identity-v0.2.9.simg -i all-genomes/ -g -m ANIb --workers 20 -o pyani-results
 ```
 
 
-B. Annotation
-The annotation was done By using MAKER,RepeatModeler, iprscan, Blastp and AHRD
- i. RepeatModeler: We generated the library for custom repeats using RepeatModeler and used these custom library of repeats to feed into MAKER
- 
+### B. Gene Annotation
+
+#### i. The general gene annotation was done By using MAKER, RepeatModeler, Interproscan, BlastP and AHRD
+
+RepeatModeler: We generated the library for custom repeats using RepeatModeler and used these custom library of repeats to feed into MAKER
 
 ```{bash, eval=F}
 ## to generate library for custom repeats using RepeatModeler
@@ -165,15 +238,27 @@ cut -d'|' -f1,1 Fo-Et-0000.all.maker.transcripts.fasta | sed 's!-RA!!g' >> Fo-Et
 ##Repeated the same for rest of the genome
 ```
   
-  ii. Gene Enrichment analysus was performed using BLAST2GO.
-  iii. SIX genes homologs were identified using BLASTp with identity threshold >90% and coverage 90-100%
-  iv. Orthologs were identified with Orthofinder(2.5.4)
+#### ii. Gene Enrichment analysus was performed using BLAST2GO
+  
+Implemented using GUI software (https://www.blast2go.com/)
+  
+#### iii. SIX genes homologs were identified using BLASTp
+
+We used an E-value cutoff of 1E-6 to ensure that they were true homologs
+
+#### iv. Orthologs were identified with Orthofinder
 ```{bash, eval=F}
  singularity exec /home/afayyaz/singularity-images/orthofinder_2.5.4.sif orthofinder -t 50 -a 10 -f /home/afayyaz/99-isolate-orth-run/ > ortho_log_file 2>&1 
 ```
   
-C. Phylogenetic Analyses
-  Phylogenetic analysis used in the maunscript are performed using BEASTv1.10.4
+### C. Phylogenetic Analyses
+
+Tools Required:
+- BEAST v1.10.4
+- ETE3
+
+Phylogenetic analysis used in the manuscript are performed using BEAST
+
 ```{bash, eval=F}
 ##Firstly, We extracted the single copy gene names/list form BUSCO results
 perl busco_find_conserved_single_copy_across_all.pl run_*/full_table* > busco_find_conserved_single_copy_across_all.txt
@@ -190,7 +275,8 @@ java -jar /home/afayyaz/bin/BEASTv1.10.4/lib/beast.jar -threads 20 gene_alignmen
 ##used standard parameters for all of the phylogenetic trees and visulaized in iTOL
 ```
   
-  - To check the congruence between different trees, we used Robinson-Foulds with ETE3 toolkit
+To check the congruence between different trees, we used Robinson-Foulds with ETE3 toolkit
+
 ```{bash, eval=F}
 
 ##We called SNP's on 1556 BUSCO single copy genes using snp-sites(https://github.com/sanger-pathogens/snp-sites)
@@ -268,13 +354,19 @@ java -jar /home/afayyaz/bin/BEASTv1.10.4/lib/beast.jar -threads 20 gene_alignmen
 ete3 compare -taboutput -t 1.txt 2.txt 3.txt 4.txt 5.txt 6.txt 7.txt 8.txt 9.txt 10.txt -r 1.txt 2.txt 3.txt 4.txt 5.txt 6.txt 7.txt 8.txt 9.txt 10.txt > result.txt
 ```
   
-D. <a id="pangenome"></a>Pangenome
-  Pangenome was constructed using PanOCT software with percentage identity threshold 95% 
+### D. <a id="pangenome"></a>Pangenome
+
+Tools required:
+- PanOCT v3.23
+- VCFtools v0.1.15
+
+Pangenome was constructed using PanOCT software with percentage identity threshold 95%. We used PanOCT because not only does it identify close orthologs but accounts for synteny during cluster prediction
+
 ```{bash, eval=F}
 singularity exec /home/afayyaz/singularity-images/panoct_3.23--pl526_1.sif panoct.pl -t blast-results.txt -g final-e-attribute.txt -P 99-all-protein.pep -f list-e.txt -b /home/afayyaz/group-e-panoct/ -i 95 -L 20 -M Y -F 1.33 -N Y -H Y -V Y -S Y -C Y -B Y -c 0,5,25,50,75,90,95,98,100 > panoct-test 2>&1
 ```
   
-Before we calculated the nucleotide diversity for pan-genome, we removed the paralogs from the gene presence absence file
+Before we calculated the nucleotide diversity for the pangenome, we removed the paralogs from the gene presence absence file
  
 ```{bash, eval=F}
 ###Removed paralogs from panoct result file
@@ -312,17 +404,17 @@ cat *.D.txt > tajima.d.txt
 ##repeat these steps for all clusters containing number of genomes from 5 to 99
 ```
   
+---
 
-## <a id="read_mapping"></a>4. Identification of SNP and genetic groups
+# <a id="read_mapping"></a>4. Identification of SNP and genetic groups
 
 ### A. Read mapping and Variant calling
 
 Tools required:
-
 - BWA MEM v0.7.9a-r786
 - SAMtools v1.3.1
-- Vcftools
-- Bcftools
+- VCFtools v0.1.15
+- BCFtools v1.16
 - Picard 
 - GATK v4.1
 
@@ -356,18 +448,15 @@ vcftools --vcf c-snps.vcf --out c-filtered --minDP 10 --max-missing 0.95 --minQ 
 ### B. Filtering VCF file 
 
 Tools required:
-
-- bcftools/1.16
-
-- vcftools/b240116
-
-- mummer/3.23
+- BCFtools v1.16
+- VCFtools v0.1.15
+- MUMmer v3.23
 
 For most population analyses, we exclusively used high quality genomes (based on BUSCO completeness > 99%, N50, number of scaffolds and genome size) - see "Genome Assembly". This provided a total list of 120 genomes, 99 of which were taxonomically within the FOSC (Fig. 2). This is reduced from the earlier VCF file, which contained 320 isolates (Supplemental Fig. 1)
 
 Reducing the VCF file from 320 to 120, was done using bcftools (custom bash script).
 
-### i. We split the VCF into separate single isolate VCF files
+#### i. We split the VCF into separate single isolate VCF files
 
 ```{bash, eval=F}
 ######## ./splitting_vcfs_retaining.sh ###########
@@ -380,25 +469,25 @@ for file in *.vcf.gz; do
 done
 ```
 
-### ii. We indexed all the single isolate VCF files
+#### ii. We indexed all the single isolate VCF files
 
 ```{bash, eval=F}
 for f in *vcf.gz; do tabix -f -p vcf $f; done
 ```
 
-### iii. We merged isolates from list of high quality genomes (information obtained from assembly data)
+#### iii. We merged isolates from list of high quality genomes (information obtained from assembly data)
 
 ```{bash, eval=F}
 bcftools merge --file-list isolate_list > ethiopia_fo_structure.vcf
 ```
 
-### iv. We removed heterozygous/ambiguous SNPs using sed
+#### iv. We removed heterozygous/ambiguous SNPs using sed
 
 ```{bash, eval=F}
 sed -i 's#0/1|0/2|0/3|0/4|1/2|1/3|1/4|2/3|2/4|3/4#[.]/[.]#g' ethiopia_fo_structure.vcf
 ```
 
-### v. We removed SNPs with high missingness and evaluated MAF filtering
+#### v. We removed SNPs with high missingness and evaluated MAF filtering
 
 To ensure that the subsequent VCF was high quality, especially for linkage disequilibrium, we adjusted filters to learn how different filters affect the subsequent linkage disequilibrium analyses. 
 
@@ -413,7 +502,7 @@ This filtering step was evaluated to understand the effects of using MAF cutoffs
 
 ![](ld_total_maf.png)
 
-### vi. To ensure SNPs were core components of the genome, mapping was informed by additional whole genome alignments (MUMmer)
+#### vi. To ensure SNPs were core components of the genome, mapping was informed by additional whole genome alignments (MUMmer)
 
 This was done on per chromosome basis (Fol4287 1-15)
 
@@ -433,16 +522,13 @@ Rscript ./mummer_coverage.R
 ### C. Identification of clonal groups using STRUCTURE
 
 Tools required:
-
-- structure-console/2.3.4
-
-- structure harvester (https://taylor0.biology.ucla.edu/structureHarvester/)
-
-- CLUMPP/1.1.2
+- STRUCTURE v2.3.4
+- Structure Harvester (https://taylor0.biology.ucla.edu/structureHarvester/)
+- CLUMPP v1.1.2
 
 Subdividing clonal lineages in fungal populations remains challenging. Traditionally, reasearchers have determined clonality based on identical MLGs. This approach fails on a whole genome scale due to the accumulation of erroneous mutations. We employed two different methods to subdivide the lineages: phylogenetics (see Gene Annotation and Analyses - BEAST) and K clustering (via STRUCTURE). 
 
-### i. <a id="struct"></a>Random subsampling SNPs
+#### i. <a id="struct"></a>Random subsampling SNPs
 
 To avoid SNP selection bias, the VCF file was randomly subsampled at a rate of ~10%. 
 Note that this script does not provide exactly 10% of the total number of SNPs (Table 1 - Non-clone corrected = 136)
@@ -485,7 +571,7 @@ END {
 }' > $out
 ```
 
-### ii. STRUCTURE
+#### ii. STRUCTURE
   
 Ran STRUCTURE on each subsampling 10 times: burnin = 10,000 and MCMC reps = 50,000. K vals = 2-20. Check out Mainparams and Extraparams for additional technical information.
   
@@ -496,11 +582,11 @@ module load structure-console/2.3.4
 structure -K 10 -o structure_large10-1-2
 ```
 
-### iii. STRUCTUREharvester
+#### iii. STRUCTUREharvester
 
 Using outputs of STRUCTURE, combine them using STRUCTURE_HARVESTER (online web server: http://taylor0.biology.ucla.edu/structureHarvester/) to produce .indfiles for CLUMPP.
 
-### iv. CLUMPP
+#### iv. CLUMPP
 
 Ran CLUMPP on HPC cluster to collate 10 permutations of each subsample. Used LargeKGreedy algorithm.
 
@@ -511,25 +597,26 @@ module load CLUMPP/1.1.2
 CLUMPP K2.paramfile -i K12.indfile -k 12 -c 133 -r 10 -m 3 -w 0 -s 2 -o K12.outfile -j K12.miscfile
 ```
 
-### v. STRUCTURE plotted with R script
+#### v. STRUCTURE plotted with R script
 
 ```{bash, eval=F}
 ######### ./structure_plotting_larger_collection #############
 ```
 
-### Clonal groups were assigned based on Euclidean distances
+#### vi. Clonal groups were assigned based on Euclidean distances
 
 ```{bash, eval=F}
 ######### ./plotting_structure_network.R ##########
 ./plotting_structure_network.R --list "list of all .outfile paths" --label "list of isolate names (in order)" --title "title of graph (usually K val included)"
 ```
 
+---
 
-## <a id="pop_gen"></a>5. Population Analyses
+# <a id="pop_gen"></a>5. Population Analyses
 
 ### A. Geographic Analyses
 
-### i. Plotting onto maps in R
+#### i. Plotting onto maps in R
 
 To create plots of geographic sampling (both chickpea and Fungal sampling)
 
@@ -542,7 +629,7 @@ To create plots of geographic sampling (both chickpea and Fungal sampling)
 
 ![](pipeline_geog_mat.png)
 
-### ii. Mantel tests
+#### ii. Mantel tests
 
 The Mantel test is a measure of correlation between two distance matrices. Here we want to understand how genetic difference (both sequence and presence/absence variation) is correlated with geography.
   
@@ -581,13 +668,11 @@ We calculated linkage disequilibrium using two different methods:
 1. Pearson's correlation coefficient (r2) [implemented in PLINK]
 2. Index of association (rbarD) [implemented in PoppR]
 
-### i. Linkage Disequilibrium via r2
+#### i. Linkage Disequilibrium via r2
 
 Tools required:
-
-- plink/1.90
-
-- bcftools/1.16
+- Plink v1.90
+- BCFtools v1.16
 
 #### Preparing datasets for "clonally-derived" vs "ancestrally-derived" SNPs (Figure 4 and Table 1)
 
@@ -715,7 +800,7 @@ r2 genome-wide plots
 
 ![](pipeline_ld_across_window.gif)
 
-### ii. Linkage disequilibrium - rbarD
+#### ii. Linkage disequilibrium - rbarD
 
 To complement the Pearson's correlation coefficient (r2) LD data, we included the index of association (rbarD)(Agapow and Burt, 2001)
 
@@ -854,7 +939,7 @@ write_delim(resmpl_ia_e, file = "results/E_isolates_ia_vals.txt", delim = "\t")
 
 Tools required:
 
-- vcftools/b240116
+- VCFtools v0.1.15
 
 Nucleotide diversity (pi) was calculated from VCF files (both [read-mapping](#read_mapping) using VCFtools (Danecek et al, 2011)
 
@@ -866,7 +951,7 @@ vcftools --gzvcf $IN.vcf.gz --window-pi  10000 --out $OUT
 
 Tools required:
 
-- vcftools/b240116
+- VCFtools v0.1.15
 
 Tajima's D was calculated from VCF files for [read-mapping](#read_mapping) directly using VCFtools (Danecek et al, 2011). The Tajima's D analysis calculated for the pangenome required additional steps and so is described above under "[Pangenome](#pangenome)".
 
@@ -900,5 +985,10 @@ Rscript ./calculating_coverage_diversity.R --populationa $clonal_lineageA.txt --
 
 ```
 
+One can see that this phenomenon is not due to selection exclusively in the boxplot below
 
-## <a id="refs"></a>6. References
+![](selection_snps_tajD.png)
+
+---
+
+# <a id="refs"></a>6. References
