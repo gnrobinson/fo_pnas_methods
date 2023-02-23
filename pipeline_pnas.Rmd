@@ -408,7 +408,7 @@ Before we calculated the nucleotide diversity for the pangenome, we removed the 
  
 ```{bash, eval=F}
 ###Removed paralogs from panoct result file
-Python3 script-paralogs.py
+Python3 remove-paralogs.py
 ###To calculate nucleotide diversity for pan-genome, we needed the files of each cluster in the pangenome containing number of genomes from 5 to 99
 awk -F"\t" '{print >> ($101".txt")}' without-paralogs.txt  
 ###Then we made a list of the cluster in the pangenome
