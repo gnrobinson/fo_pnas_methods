@@ -163,7 +163,6 @@ RepeatModeler: We generated the library for custom repeats using RepeatModeler a
 ./dfam-tetools.sh --singularity --container=dfam/tetools:latest --trf_prgm=/erdos/adf/sw/trf409.linux64 -- BuildDatabase -name fusariumdatabase -engine ncbi Fo-Et-0090.fasta
 ./dfam-tetools.sh --singularity --container=dfam/tetools:latest --trf_prgm=/erdos/adf/sw/trf409.linux64 -- RepeatModeler -database fusariumdatabase -LTRStruct -pa 20 >& repeats.out
 
-```{bash, eval=F}
 ##structural annotation using MAKER
 
 i=`ls *.fasta`
@@ -222,9 +221,11 @@ ${IPRSCAN_HELPERS}/clean_AHRD.sh all.ahrd.tsv | sed 's/-mRNA-1//' > all.ahrd.tsv
 popd
 cat iprscan_raw/* > all.iprscan_raw
 awk 'BEGIN {FS="\t"} NF==9 && $2 == "maker" {print}' Fo-Et-0000.all.gff > Fo-Et-0000.all.maker.gff
+
 ##We added the annotation into gff files
 singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img ipr_update_gff Fo-Et-0000.all.maker.gff all.iprscan_raw > Fo-Et-0000.all.gff.iprscan_updated
 ${IPRSCAN_HELPERS}/add_note_attr_inGFF.pl AHRD/all.ahrd.tsv.cleaned Fo-Et-0000.all.gff.iprscan_updated > Fo-Et-0000.all.gff.iprscan_updated+AHRD
+
 ##We generated the gene id's and replace it with existing gene identifiers in the fasta and gff files.
 singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img maker_map_ids --prefix FO0000- Fo-Et-0000.all.gff > map
 singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img map_gff_ids map Fo-Et-0000.all.gff
@@ -235,7 +236,8 @@ singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/ma
 cut -d'|' -f1,1 Fo-Et-0000.all.maker.proteins.fasta | sed 's!-RA!!g' >> Fo-Et-0000.all.maker.proteins.final.fasta
 cut -d'|' -f1,1 Fo-Et-0000.all.maker.transcripts.fasta | sed 's!-RA!!g' >> Fo-Et-0000.all.maker.transcripts.final.fasta
 /home/localhost/adf/ahrdify_fasta.pl AHRD/all.ahrd.tsv.cleaned Fo-Et-0000.all.maker.proteins.fasta Fo-Et-0000.all.maker.transcripts.fasta
-##Repeated the same for rest of the genome
+
+##Repeated the same for rest of the genomes
 ```
   
 #### ii. Gene Enrichment analysus was performed using BLAST2GO
@@ -363,7 +365,43 @@ Tools required:
 Pangenome was constructed using PanOCT software with percentage identity threshold 95%. We used PanOCT because not only does it identify close orthologs but accounts for synteny during cluster prediction
 
 ```{bash, eval=F}
-singularity exec /home/afayyaz/singularity-images/panoct_3.23--pl526_1.sif panoct.pl -t blast-results.txt -g final-e-attribute.txt -P 99-all-protein.pep -f list-e.txt -b /home/afayyaz/group-e-panoct/ -i 95 -L 20 -M Y -F 1.33 -N Y -H Y -V Y -S Y -C Y -B Y -c 0,5,25,50,75,90,95,98,100 > panoct-test 2>&1
+singularity exec /home/afayyaz/singularity-images/panoct_3.23--pl526_1.sif panoct.pl -t blast-results.txt -g final-attribute.txt -P 99-all-protein.pep -f list.txt -b /home/afayyaz/panoct/ -i 95 -L 20 -M Y -F 1.33 -N Y -H Y -V Y -S Y -C Y -B Y -c 0,5,25,50,75,90,95,98,100 > panoct-log 2>&1
+```
+
+We used upset plot to demonstrate how many accessory genes lineages O, P, R, and E shared with each other
+
+```{r}
+## R Markdown
+install.packages("UpSetR")
+install.packages("VennDiagram")
+suppressWarnings(suppressMessages(library(UpSetR)))
+suppressWarnings(suppressMessages(library(VennDiagram)))
+suppressWarnings(suppressMessages(library(RColorBrewer)))
+input1 <- c(
+  "E&O" = 970,
+"E&P" = 1138,
+"E&R" = 963,
+"O&P"= 2821,
+"O&R" = 2559,
+"P&R" = 2797,
+"E&O&P" = 653,
+"E&O&R" = 568,
+"E&P&R" = 647,
+"O&P&R" = 1971,
+"E&O&P&R" = 406
+)
+
+upset(fromExpression(input1), 
+      nintersects = 40, 
+      nsets = 4, 
+      order.by = "freq", 
+      decreasing = T, 
+      mb.ratio = c(0.6, 0.4),
+      number.angles = 0, 
+      text.scale = 1.1, 
+      point.size = 2.8, 
+      line.size = 1
+      )
 ```
   
 Before we calculated the nucleotide diversity for the pangenome, we removed the paralogs from the gene presence absence file
