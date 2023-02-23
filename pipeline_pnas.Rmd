@@ -235,7 +235,7 @@ singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/ma
 singularity exec --bind `pwd`:/pwd --pwd /pwd /erdos/adf/sw/singularityImages/maker-2.31.9--3.img map_data_ids map AHRD/all.ahrd.tsv.cleaned
 cut -d'|' -f1,1 Fo-Et-0000.all.maker.proteins.fasta | sed 's!-RA!!g' >> Fo-Et-0000.all.maker.proteins.final.fasta
 cut -d'|' -f1,1 Fo-Et-0000.all.maker.transcripts.fasta | sed 's!-RA!!g' >> Fo-Et-0000.all.maker.transcripts.final.fasta
-/home/localhost/adf/ahrdify_fasta.pl AHRD/all.ahrd.tsv.cleaned Fo-Et-0000.all.maker.proteins.fasta Fo-Et-0000.all.maker.transcripts.fasta
+/home/afayyaz/ahrdify_fasta.pl AHRD/all.ahrd.tsv.cleaned Fo-Et-0000.all.maker.proteins.fasta Fo-Et-0000.all.maker.transcripts.fasta
 
 ##Repeated the same for rest of the genomes
 ```
@@ -263,7 +263,7 @@ Phylogenetic analysis used in the manuscript are performed using BEAST
 
 ```{bash, eval=F}
 ##Firstly, We extracted the single copy gene names/list form BUSCO results
-perl busco_find_conserved_single_copy_across_all.pl run_*/full_table* > busco_find_conserved_single_copy_across_all.txt
+python3.6 find_single_copy_genes.py run_*/full_table* > busco_find_conserved_single_copy_across_all.txt
 ##then we extracted the fasta sequences from the genoem files
 for i in `cat busco_find_conserved_single_copy_across_all.txt`; do grep -A1 $i all-busco-single-copy-genes.fna --no-group-separator >> $i.fna; done
 ##We used clustalo for alignment of the 1556 genes
