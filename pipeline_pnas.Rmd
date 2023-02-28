@@ -378,17 +378,17 @@ suppressWarnings(suppressMessages(library(UpSetR)))
 suppressWarnings(suppressMessages(library(VennDiagram)))
 suppressWarnings(suppressMessages(library(RColorBrewer)))
 input1 <- c(
-  "E&O" = 970,
-"E&P" = 1138,
-"E&R" = 963,
-"O&P"= 2821,
-"O&R" = 2559,
-"P&R" = 2797,
-"E&O&P" = 653,
-"E&O&R" = 568,
-"E&P&R" = 647,
-"O&P&R" = 1971,
-"E&O&P&R" = 406
+  "E&O" = 958,
+"E&P" = 1126,
+"E&R" = 955,
+"O&P"= 2796,
+"O&R" = 2545,
+"P&R" = 2774,
+"E&O&P" = 647,
+"E&O&R" = 564,
+"E&P&R" = 643,
+"O&P&R" = 1959,
+"E&O&P&R" = 403
 )
 
 upset(fromExpression(input1), 
